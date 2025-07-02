@@ -4,3 +4,6 @@
 [submodule "libpsirngclient"]
 	path = libpsirngclient
 	url = https://github.com/nullspook/libpsirngclient.git
+[submodule "meterfeeder"]
+	path = meterfeeder
+	url = https://github.com/vfp2/MeterFeeder.git
