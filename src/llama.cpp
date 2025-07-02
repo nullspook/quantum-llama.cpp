@@ -18209,7 +18209,7 @@ struct llama_context * llama_new_context_with_model(
     if (meterfeeder_device != nullptr) {
         // Initialize MeterFeeder
         char error_reason[256];
-        if (int result = MF_Initialize(error_reason); result != 0) {
+        if (int result = MF_Initialize(error_reason); result != 1) {
             LLAMA_LOG_ERROR("%s: failed to initialize MeterFeeder: %s\n", __func__, error_reason);
             llama_free(ctx);
             return nullptr;
