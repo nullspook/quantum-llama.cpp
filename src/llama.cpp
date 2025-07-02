@@ -3191,6 +3191,12 @@ struct llama_context {
         }
 
         ggml_backend_buffer_free(buf_output);
+
+        // Clean up MeterFeeder resources
+        if (sampling.use_meterfeeder) {
+            delete[] sampling.meterfeeder_serial_number;
+            MF_Shutdown();
+        }
     }
 
     const struct llama_model & model;
@@ -18195,28 +18201,95 @@ struct llama_context * llama_new_context_with_model(
     ctx->sampling.rng = std::mt19937(params.seed);
 
     ctx->sampling.psirngclient_ptr = nullptr;
+    ctx->sampling.meterfeeder_serial_number = nullptr;
+    ctx->sampling.use_meterfeeder = false;
 
-    const char* psirng_host      = std::getenv("PSIRNG_HOST");
-    const char* psirng_grpc_port = std::getenv("PSIRNG_GRPC_PORT");
-    const char* psirng_cert_path = std::getenv("PSIRNG_CERT_PATH");
-
-    if (psirng_host != nullptr && psirng_grpc_port != nullptr && psirng_cert_path != nullptr) {
-        if (int result = psirngclient_init(&ctx->sampling.psirngclient_ptr, psirng_host, std::stoi(psirng_grpc_port), psirng_cert_path); result != PSIRNGCLIENT_RESULT_OK) {
-            LLAMA_LOG_ERROR("%s: failed to initialize psirng client: %d\n", __func__, result);
+    // Check for MeterFeeder configuration first
+    const char* meterfeeder_device = std::getenv("METERFEEDER_USE_DEVICE");
+    if (meterfeeder_device != nullptr) {
+        // Initialize MeterFeeder
+        char error_reason[256];
+        if (int result = MF_Initialize(error_reason); result != 0) {
+            LLAMA_LOG_ERROR("%s: failed to initialize MeterFeeder: %s\n", __func__, error_reason);
             llama_free(ctx);
             return nullptr;
         }
-        if (!psirngclient_ishealthy(ctx->sampling.psirngclient_ptr)) {
-            LLAMA_LOG_ERROR("%s: psirng is not healthy\n", __func__);
+
+        // Check if the specified device exists
+        int num_generators = MF_GetNumberGenerators();
+        if (num_generators <= 0) {
+            LLAMA_LOG_ERROR("%s: no MeterFeeder devices found\n", __func__);
             llama_free(ctx);
             return nullptr;
-        } else {
-            LLAMA_LOG_INFO("%s: Using psirng running on %s:%s\n", __func__, psirng_host, psirng_grpc_port);
         }
+
+        // Get list of generators and check if our device is in the list
+        char** generators = new char*[num_generators];
+        for (int i = 0; i < num_generators; i++) {
+            generators[i] = new char[256];
+        }
+
+        int result = MF_GetSerialListGeneratorsWithSize(generators, num_generators);
+        if (result != num_generators) {
+            LLAMA_LOG_ERROR("%s: failed to get MeterFeeder device list\n", __func__);
+            for (int i = 0; i < num_generators; i++) {
+                delete[] generators[i];
+            }
+            delete[] generators;
+            llama_free(ctx);
+            return nullptr;
+        }
+
+        bool device_found = false;
+        for (int i = 0; i < num_generators; i++) {
+            if (strcmp(generators[i], meterfeeder_device) == 0) {
+                device_found = true;
+                break;
+            }
+        }
+
+        // Clean up generators array
+        for (int i = 0; i < num_generators; i++) {
+            delete[] generators[i];
+        }
+        delete[] generators;
+
+        if (!device_found) {
+            LLAMA_LOG_ERROR("%s: MeterFeeder device '%s' not found\n", __func__, meterfeeder_device);
+            llama_free(ctx);
+            return nullptr;
+        }
+
+        // Store the device serial number
+        ctx->sampling.meterfeeder_serial_number = new char[strlen(meterfeeder_device) + 1];
+        strcpy(ctx->sampling.meterfeeder_serial_number, meterfeeder_device);
+        ctx->sampling.use_meterfeeder = true;
+
+        LLAMA_LOG_INFO("%s: Using MeterFeeder device: %s\n", __func__, meterfeeder_device);
     } else {
-        LLAMA_LOG_ERROR("%s: psirng is not configured\n", __func__);
-        llama_free(ctx);
-        return nullptr;
+        // Fall back to PsiRNGClient configuration
+        const char* psirng_host      = std::getenv("PSIRNG_HOST");
+        const char* psirng_grpc_port = std::getenv("PSIRNG_GRPC_PORT");
+        const char* psirng_cert_path = std::getenv("PSIRNG_CERT_PATH");
+
+        if (psirng_host != nullptr && psirng_grpc_port != nullptr && psirng_cert_path != nullptr) {
+            if (int result = psirngclient_init(&ctx->sampling.psirngclient_ptr, psirng_host, std::stoi(psirng_grpc_port), psirng_cert_path); result != PSIRNGCLIENT_RESULT_OK) {
+                LLAMA_LOG_ERROR("%s: failed to initialize psirng client: %d\n", __func__, result);
+                llama_free(ctx);
+                return nullptr;
+            }
+            if (!psirngclient_ishealthy(ctx->sampling.psirngclient_ptr)) {
+                LLAMA_LOG_ERROR("%s: psirng is not healthy\n", __func__);
+                llama_free(ctx);
+                return nullptr;
+            } else {
+                LLAMA_LOG_INFO("%s: Using psirng running on %s:%s\n", __func__, psirng_host, psirng_grpc_port);
+            }
+        } else {
+            LLAMA_LOG_ERROR("%s: neither MeterFeeder nor psirng is configured\n", __func__);
+            llama_free(ctx);
+            return nullptr;
+        }
     }
 
     ctx->logits_all   = params.logits_all;

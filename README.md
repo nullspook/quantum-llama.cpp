@@ -2,11 +2,17 @@
 
 quantum-llama.cpp is a modified [llama.cpp](https://github.com/ggml-org/llama.cpp)
 that uses Quantum World Corporation (QWC) / ComScire QRNGs (Quantum Random
-Number Generators) to generate the tokens. While the output may be
-indistinguishable from the original llama.cpp, it introduces a poetic idea,
-_"the output is co-authored by the universe itself."_
+Number Generators) or MeterFeeder hardware RNG devices to generate the tokens. 
+While the output may be indistinguishable from the original llama.cpp, it introduces 
+a poetic idea, _"the output is co-authored by the universe itself."_
 
-To use quantum-llama.cpp, you need to have a running [psirng](https://github.com/nullspook/psirng)
+## Random Number Generator Options
+
+quantum-llama.cpp supports two RNG systems:
+
+### Option 1: PsiRNG (Network-based Quantum RNG)
+
+To use PsiRNG, you need to have a running [psirng](https://github.com/nullspook/psirng)
 server. Set `PSIRNG_HOST`, `PSIRNG_GRPC_PORT`, and `PSIRNG_CERT_PATH`
 environment variables before running `llama-*` programs.
 
@@ -19,7 +25,7 @@ cd quantum-llama.cpp
 cmake -B build
 cmake --build build --config Release
 
-# Set environment variables
+# Set environment variables for PsiRNG
 export PSIRNG_HOST=192.0.2.10
 export PSIRNG_GRPC_PORT=50051
 export PSIRNG_CERT_PATH=/path/to/cert.pem
@@ -28,6 +34,41 @@ export PSIRNG_CERT_PATH=/path/to/cert.pem
 cd build/bin
 ./llama-cli -m /path/to/model.gguf -p "I believe the meaning of life is" -n 128
 ```
+
+### Option 2: MeterFeeder (Hardware RNG)
+
+To use MeterFeeder hardware RNG devices, set the `METERFEEDER_USE_DEVICE`
+environment variable with your device serial number.
+
+```bash
+# Clone
+git clone --recurse-submodules https://github.com/nullspook/quantum-llama.cpp.git
+cd quantum-llama.cpp
+
+# Build MeterFeeder library
+cd meterfeeder
+chmod +x linux-build-lib.sh
+./linux-build-lib.sh
+cd ..
+
+# Build quantum-llama.cpp
+cmake -B build
+cmake --build build --config Release
+
+# Set environment variable for MeterFeeder
+export METERFEEDER_USE_DEVICE="your_device_serial_number"
+
+# Run
+cd build/bin
+./llama-cli -m /path/to/model.gguf -p "I believe the meaning of life is" -n 128
+```
+
+### Automatic Detection
+
+The system automatically detects which RNG to use based on environment variables:
+- If `METERFEEDER_USE_DEVICE` is set, it uses MeterFeeder
+- If `PSIRNG_HOST`, `PSIRNG_GRPC_PORT`, and `PSIRNG_CERT_PATH` are set, it uses PsiRNG
+- If neither is configured, the system will exit with an error
 
 **Note:** quantum-llama.cpp must be built using `cmake`.
 

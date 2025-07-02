@@ -4,12 +4,42 @@
 
 #include "psirngclient.h"
 
+// MeterFeeder function declarations
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Initialize the connected generators
+int MF_Initialize(char* pErrorReason);
+
+// Get the number of connected and successfully initialized generators
+int MF_GetNumberGenerators();
+
+// Get the list of connected and successfully initialized generators
+// Array element format: <serial number>
+int MF_GetSerialListGeneratorsWithSize(char** pGenerators, int arraySize);
+
+// Get a random floating point number between [0,1)
+double MF_RandUniform(char* generatorSerialNumber, char* pErrorReason);
+
+// Shutdown and de-initialize all the generators
+void MF_Shutdown();
+
+#ifdef __cplusplus
+}
+#endif
+
 struct llama_sampling {
     llama_sampling(int32_t n_vocab) : n_vocab(n_vocab) {}
 
     std::mt19937 rng;
 
+    // PsiRNGClient support
     psirngclient * psirngclient_ptr;
+
+    // MeterFeeder support
+    char* meterfeeder_serial_number;
+    bool use_meterfeeder;
 
     int32_t n_vocab = 0;
 
