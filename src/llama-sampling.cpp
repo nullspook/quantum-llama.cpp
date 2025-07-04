@@ -628,9 +628,19 @@ llama_token llama_sample_token_with_rng_impl(struct llama_sampling * smpl, llama
     int idx;
     double u;
 
-    int rand_result = psirngclient_randuniform(smpl->psirngclient_ptr, &u, 1, 0.0, 1.0);
-    if (rand_result != PSIRNGCLIENT_RESULT_OK) {
-        GGML_ABORT("psirngclient_randuniform error: %d", rand_result);
+    if (smpl->use_meterfeeder) {
+        // Use MeterFeeder for random number generation
+        char error_reason[256];
+        u = MF_RandUniform(smpl->meterfeeder_serial_number, error_reason);
+        if (strlen(error_reason) > 0) {
+            GGML_ABORT("MF_RandUniform error: %s", error_reason);
+        }
+    } else {
+        // Use PsiRNGClient for random number generation
+        int rand_result = psirngclient_randuniform(smpl->psirngclient_ptr, &u, 1, 0.0, 1.0);
+        if (rand_result != PSIRNGCLIENT_RESULT_OK) {
+            GGML_ABORT("psirngclient_randuniform error: %d", rand_result);
+        }
     }
 
     idx = static_cast<int>(std::distance(cdf.begin(), std::lower_bound(cdf.begin(), cdf.end(), u)));

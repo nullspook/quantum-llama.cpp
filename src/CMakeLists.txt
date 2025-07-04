@@ -27,6 +27,12 @@ target_compile_features   (llama PUBLIC cxx_std_11) # don't bump
 
 target_link_libraries(llama PUBLIC ggml psirngclient)
 
+# Add MeterFeeder library if it exists
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../meterfeeder/builds/linux/libmeterfeeder.so")
+    target_link_libraries(llama PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../meterfeeder/builds/linux/libmeterfeeder.so")
+    target_link_directories(llama PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../meterfeeder/builds/linux")
+endif()
+
 if (BUILD_SHARED_LIBS)
     set_target_properties(llama PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_compile_definitions(llama PRIVATE LLAMA_SHARED LLAMA_BUILD)
